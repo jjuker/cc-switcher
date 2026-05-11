@@ -1,0 +1,19 @@
+# Build artifacts
+/target
+Cargo.lock
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# User data (不应提交用户个人数据)
+pricing.json
