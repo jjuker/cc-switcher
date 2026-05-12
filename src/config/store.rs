@@ -77,36 +77,56 @@ impl ConfigStore {
 
     /// 设置当前配置
     pub fn set_current(&mut self, name: &str) -> Result<()> {
-        // 先清除所有当前标记
         for config in &mut self.configs {
             config.is_current = false;
         }
-
-        // 设置目标配置为当前
         let config = self.configs
             .iter_mut()
             .find(|c| c.name == name)
             .context(format!("配置不存在: {}", name))?;
-
         config.is_current = true;
         self.save()?;
         Ok(())
     }
 
+    /// 设置全局默认配置
+    pub fn set_default(&mut self, name: &str) -> Result<()> {
+        for config in &mut self.configs {
+            config.is_default = false;
+        }
+        let config = self.configs
+            .iter_mut()
+            .find(|c| c.name == name)
+            .context(format!("配置不存在: {}", name))?;
+        config.is_default = true;
+        self.save()?;
+        Ok(())
+    }
+
     /// 删除配置
-    pub fn remove(&mut self, name: &str) -> Result<()> {
+    pub fn remove(&mut self, name: &str) -> Result<RemoveInfo> {
         let index = self.configs
             .iter()
             .position(|c| c.name == name)
             .context(format!("配置不存在: {}", name))?;
 
-        self.configs.remove(index);
+        let config = self.configs.remove(index);
         self.save()?;
-        Ok(())
+
+        Ok(RemoveInfo {
+            was_current: config.is_current,
+            was_default: config.is_default,
+        })
     }
 
-    /// 获取当前配置
-    pub fn current(&self) -> Option<&Config> {
-        self.configs.iter().find(|c| c.is_current)
+    /// 获取默认配置
+    pub fn get_default(&self) -> Option<&Config> {
+        self.configs.iter().find(|c| c.is_default)
     }
+}
+
+/// 删除结果信息
+pub struct RemoveInfo {
+    pub was_current: bool,
+    pub was_default: bool,
 }

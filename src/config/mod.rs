@@ -19,6 +19,9 @@ pub struct Config {
     /// 是否当前激活
     #[serde(default)]
     pub is_current: bool,
+    /// 是否全局默认
+    #[serde(default)]
+    pub is_default: bool,
 }
 
 impl Config {
@@ -29,6 +32,7 @@ impl Config {
             path,
             description,
             is_current: false,
+            is_default: false,
         }
     }
 }
@@ -78,22 +82,24 @@ impl ConfigManager {
         let configs = self.store.list();
 
         if configs.is_empty() {
-            println!("暂无配置，使用 `cc-switcher config add <name> <path>` 添加");
+            println!("暂无配置，使用 `ccs add <name> <path>` 添加");
             return Ok(());
         }
 
         println!("配置列表:");
         for config in configs {
-            let current = if config.is_current { "✓" } else { " " };
+            let current = if config.is_current { "●" } else { " " };
+            let default = if config.is_default { "★" } else { " " };
             let desc = config.description.as_deref().unwrap_or("");
             println!(
-                "  {} {} → {} {}",
-                current,
+                " {}{} {} → {} {}",
+                current, default,
                 config.name,
                 config.path.display(),
                 desc
             );
         }
+        println!("\n  ● 当前激活  ★ 全局默认");
         Ok(())
     }
 
@@ -120,26 +126,35 @@ impl ConfigManager {
 
     /// 删除配置
     pub fn remove(&mut self, name: &str) -> Result<()> {
-        self.store.remove(name)?;
-        println!("✅ 已删除配置: {}", name);
+        let info = self.store.remove(name)?;
+
+        // 提示用户状态变化
+        if info.was_default {
+            println!("⚠️  已删除默认配置 '{}', 请重新设置默认: ccs default <name>", name);
+        }
+        if info.was_current {
+            println!("⚠️  已删除当前激活配置 '{}'", name);
+        }
+        if !info.was_default && !info.was_current {
+            println!("✅ 已删除配置: {}", name);
+        }
         Ok(())
     }
 
-    /// 显示当前配置
-    pub fn current(&self) -> Result<()> {
-        let current = self.store.current();
-
-        match current {
-            Some(config) => {
-                println!("当前配置: {} → {}", config.name, config.path.display());
-                if let Some(desc) = &config.description {
-                    println!("描述: {}", desc);
-                }
-            }
-            None => {
-                println!("暂无激活配置");
-            }
-        }
+    /// 设置全局默认配置
+    pub fn set_default(&mut self, name: &str) -> Result<()> {
+        self.store.set_default(name)?;
+        println!("✅ 已设置默认配置: {}", name);
         Ok(())
+    }
+
+    /// 获取默认配置名称
+    pub fn get_default(&self) -> Option<String> {
+        self.store.get_default().map(|c| c.name.clone())
+    }
+
+    /// 检查配置是否存在
+    pub fn exists(&self, name: &str) -> bool {
+        self.store.get(name).is_ok()
     }
 }

@@ -3,37 +3,47 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "cc-switcher")]
+#[command(name = "ccs")]
 #[command(about = "Claude Code 配置管理器 + 成本追踪器")]
+#[command(after_help = "\
+示例:
+  ccs                    # 自动选择配置启动 Claude Code
+  ccs work               # 用 work 配置启动
+  ccs work -- -p         # 带参数启动
+  ccs default work       # 设置全局默认配置
+  ccs pin work           # 项目级绑定配置
+")]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Commands,
+    pub command: Option<Commands>,
 }
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// 配置管理
-    Config {
-        #[command(subcommand)]
-        action: ConfigCommands,
-    },
-    /// 成本统计
-    Cost {
-        #[command(subcommand)]
-        action: CostCommands,
-    },
-    /// 用指定配置运行 Claude Code
-    Run {
-        /// 配置名称
-        name: String,
+    /// 启动 Claude Code（无参数自动选择，有参数指定配置）
+    #[command(visible_alias = "run")]
+    Use {
+        /// 配置名称（可选，空则自动选择：pin > default）
+        name: Option<String>,
         /// 传递给 claude 的参数
         #[arg(trailing_var_arg = true)]
         args: Vec<String>,
     },
-}
-
-#[derive(Subcommand)]
-pub enum ConfigCommands {
+    /// 设置全局默认配置
+    Default {
+        /// 配置名称
+        name: String,
+    },
+    /// 项目级绑定配置（写入当前目录 .cc-switcher.json）
+    Pin {
+        /// 配置名称
+        name: String,
+    },
+    /// 解除项目绑定
+    Unpin,
+    /// 列出所有配置
+    #[command(visible_alias = "ls")]
+    List,
     /// 添加配置
     Add {
         /// 配置名称
@@ -44,34 +54,22 @@ pub enum ConfigCommands {
         #[arg(short, long)]
         description: Option<String>,
     },
-    /// 列出所有配置
-    List,
-    /// 切换配置
-    Switch {
-        /// 配置名称
-        name: String,
-    },
     /// 删除配置
+    #[command(visible_alias = "rm")]
     Remove {
         /// 配置名称
         name: String,
     },
-    /// 显示当前配置
-    Current,
-}
-
-#[derive(Subcommand)]
-pub enum CostCommands {
-    /// 今日统计
+    /// 今日成本统计
     Today,
-    /// 本月统计
+    /// 本月成本统计
     Month,
-    /// 详细报告
+    /// 同步会话日志
+    Sync,
+    /// 详细成本报告
     Report {
         /// 输出格式 (table/json)
         #[arg(short, long, default_value = "table")]
         format: String,
     },
-    /// 同步会话日志
-    Sync,
 }
