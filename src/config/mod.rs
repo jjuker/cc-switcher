@@ -37,6 +37,37 @@ impl Config {
     }
 }
 
+/// 配置文件默认存放目录: ~/.cc-switcher/configs/
+pub fn configs_dir() -> Result<PathBuf> {
+    let dir = crate::utils::ensure_data_dir()?.join("configs");
+    if !dir.exists() {
+        std::fs::create_dir_all(&dir)
+            .context(format!("无法创建配置目录: {}", dir.display()))?;
+    }
+    Ok(dir)
+}
+
+/// 默认配置模板
+pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "ANTHROPIC_BASE_URL": "",
+    "ANTHROPIC_AUTH_TOKEN": "",
+    "ANTHROPIC_MODEL": "",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "",
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
+    "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  },
+  "language": "中文",
+  "skipWebFetchPreflight": true,
+  "theme": "dark-ansi",
+  "verbose": true
+}
+"#;
+
 /// Claude Code settings.json 路径
 pub fn settings_path() -> Result<PathBuf> {
     let home = dirs::home_dir().context("无法获取用户主目录")?;
@@ -124,21 +155,10 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// 删除配置
-    pub fn remove(&mut self, name: &str) -> Result<()> {
+    /// 删除配置（返回文件路径信息）
+    pub fn remove(&mut self, name: &str) -> Result<store::RemoveInfo> {
         let info = self.store.remove(name)?;
-
-        // 提示用户状态变化
-        if info.was_default {
-            println!("⚠️  已删除默认配置 '{}', 请重新设置默认: ccs default <name>", name);
-        }
-        if info.was_current {
-            println!("⚠️  已删除当前激活配置 '{}'", name);
-        }
-        if !info.was_default && !info.was_current {
-            println!("✅ 已删除配置: {}", name);
-        }
-        Ok(())
+        Ok(info)
     }
 
     /// 设置全局默认配置
@@ -157,4 +177,86 @@ impl ConfigManager {
     pub fn exists(&self, name: &str) -> bool {
         self.store.get(name).is_ok()
     }
+
+    /// 新建配置（自动创建文件，打开编辑器）
+    pub fn new_config(&mut self, name: String, description: Option<String>) -> Result<()> {
+        // 验证名称
+        let name = validate_config_name(&name)?;
+
+        // 生成配置文件路径
+        let configs_dir = configs_dir()?;
+        let path = configs_dir.join(format!("{}.json", name));
+
+        // 检查文件是否已存在
+        if path.exists() {
+            return Err(anyhow::anyhow!("配置文件已存在: {}", path.display()));
+        }
+
+        // 写入默认模板
+        std::fs::write(&path, DEFAULT_CONFIG_TEMPLATE)
+            .context(format!("无法写入配置文件: {}", path.display()))?;
+
+        // 先打印，再添加到存储
+        println!("✅ 已创建配置");
+        println!("📝 配置文件: {}", path.display());
+
+        let config = Config::new(name.clone(), path, description);
+        self.store.add(config)?;
+
+        // 打开编辑器（用保存的 name 获取）
+        open_editor(&self.store.get(&name)?.path)?;
+
+        Ok(())
+    }
+}
+
+/// 验证配置名称（防止路径遍历和非法文件名）
+fn validate_config_name(name: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(anyhow::anyhow!("配置名称不能为空"));
+    }
+    // 检查路径分隔符和 Windows 禁止字符
+    if name.contains(['/', '\\', ':', '\0', '<', '>', '"', '|', '?', '*']) {
+        return Err(anyhow::anyhow!(
+            "配置名称不能包含特殊字符: / \\ : < > \" | ? *"
+        ));
+    }
+    // 检查路径遍历（仅检查 . 和 .. 作为独立名称）
+    if name == "." || name == ".." {
+        return Err(anyhow::anyhow!("无效的配置名称"));
+    }
+    // Windows 文件名不能以空格或点结尾
+    if name.ends_with(' ') || name.ends_with('.') {
+        return Err(anyhow::anyhow!("配置名称不能以空格或点结尾"));
+    }
+    if name.len() > 64 {
+        return Err(anyhow::anyhow!("配置名称过长（最多64字符）"));
+    }
+    Ok(name.to_string())
+}
+
+/// 打开编辑器编辑配置文件
+fn open_editor(path: &std::path::Path) -> Result<()> {
+    // 优先使用环境变量，默认 VS Code
+    let editor = std::env::var("EDITOR")
+        .or_else(|_| std::env::var("VISUAL"))
+        .unwrap_or_else(|_| "code".to_string());
+
+    // 安全验证：编辑器名称不应包含路径分隔符或特殊字符
+    if editor.contains(['/', '\\', ';', '&', '|', '`', '$', '(', ')']) {
+        println!("⚠️  编辑器名称包含不安全字符，请手动编辑: {}", path.display());
+        println!("   编辑器设置: {}", editor);
+        return Ok(());
+    }
+
+    let result = std::process::Command::new(&editor).arg(path).status();
+
+    match result {
+        Ok(status) if status.success() => {}
+        Ok(_) => println!("⚠️  编辑器启动失败，请手动编辑: {}", path.display()),
+        Err(_) => println!("⚠️  未找到编辑器 '{}', 请手动编辑: {}", editor, path.display()),
+    }
+
+    Ok(())
 }

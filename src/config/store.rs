@@ -116,6 +116,7 @@ impl ConfigStore {
         Ok(RemoveInfo {
             was_current: config.is_current,
             was_default: config.is_default,
+            path: config.path,
         })
     }
 
@@ -129,4 +130,5 @@ impl ConfigStore {
 pub struct RemoveInfo {
     pub was_current: bool,
     pub was_default: bool,
+    pub path: PathBuf,
 }

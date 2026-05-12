@@ -8,8 +8,10 @@ use clap::{Parser, Subcommand};
 #[command(after_help = "\
 示例:
   ccs                    # 自动选择配置启动 Claude Code
-  ccs work               # 用 work 配置启动
+  ccs deepseek           # 用 deepseek 配置启动（等价于 ccs use deepseek）
   ccs work -- -p         # 带参数启动
+  ccs new personal       # 创建新配置并打开编辑
+  ccs add work ./work.json  # 添加已有配置文件
   ccs default work       # 设置全局默认配置
   ccs pin work           # 项目级绑定配置
 ")]
@@ -20,7 +22,7 @@ pub struct Cli {
 
 #[derive(Subcommand)]
 pub enum Commands {
-    /// 启动 Claude Code（无参数自动选择，有参数指定配置）
+    /// 启动 Claude Code（显式指定配置名）
     #[command(visible_alias = "run")]
     Use {
         /// 配置名称（可选，空则自动选择：pin > default）
@@ -44,7 +46,15 @@ pub enum Commands {
     /// 列出所有配置
     #[command(visible_alias = "ls")]
     List,
-    /// 添加配置
+    /// 新建配置（自动创建文件并打开编辑）
+    New {
+        /// 配置名称
+        name: String,
+        /// 描述
+        #[arg(short, long)]
+        description: Option<String>,
+    },
+    /// 添加配置（指定已有配置文件路径）
     Add {
         /// 配置名称
         name: String,
@@ -59,6 +69,9 @@ pub enum Commands {
     Remove {
         /// 配置名称
         name: String,
+        /// 同时删除配置文件
+        #[arg(short, long)]
+        delete: bool,
     },
     /// 今日成本统计
     Today,
@@ -72,4 +85,7 @@ pub enum Commands {
         #[arg(short, long, default_value = "table")]
         format: String,
     },
+    /// 捕获未知子命令作为配置名称（如 ccs deepseek）
+    #[command(external_subcommand)]
+    Run(Vec<String>),
 }
