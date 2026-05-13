@@ -36,7 +36,6 @@ fn handle_command(cmd: Commands) -> Result<()> {
         Commands::Remove { name, delete } => handle_remove(&name, delete)?,
         Commands::Today => handle_today()?,
         Commands::Month => handle_month()?,
-        Commands::Sync => handle_sync()?,
         Commands::Report { format } => handle_report(&format)?,
     }
     Ok(())
@@ -70,7 +69,7 @@ fn parse_external_args(args: &[String]) -> (String, Vec<String>) {
 fn handle_run(name: Option<String>, args: Vec<String>) -> Result<()> {
     let manager = config::ConfigManager::new()?;
     let config_name = run::resolve_config_name(name, &manager)?;
-    run::run_with_config(&config_name, &args)?;
+    run::run_with_config(&config_name, &args, &manager)?;
     Ok(())
 }
 
@@ -129,10 +128,7 @@ fn handle_remove(name: &str, delete: bool) -> Result<()> {
     if info.was_default {
         println!("⚠️  已删除默认配置 '{}', 请重新设置: ccs default <name>", name);
     }
-    if info.was_current {
-        println!("⚠️  已删除当前激活配置 '{}'", name);
-    }
-    if !info.was_default && !info.was_current {
+    if !info.was_default {
         println!("✅ 已删除配置: {}", name);
     }
 
@@ -183,12 +179,6 @@ fn handle_today() -> Result<()> {
 fn handle_month() -> Result<()> {
     let manager = cost::CostManager::new()?;
     manager.month()?;
-    Ok(())
-}
-
-fn handle_sync() -> Result<()> {
-    let mut manager = cost::CostManager::new()?;
-    manager.sync()?;
     Ok(())
 }
 

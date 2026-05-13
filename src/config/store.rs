@@ -75,20 +75,6 @@ impl ConfigStore {
         &self.configs
     }
 
-    /// 设置当前配置
-    pub fn set_current(&mut self, name: &str) -> Result<()> {
-        for config in &mut self.configs {
-            config.is_current = false;
-        }
-        let config = self.configs
-            .iter_mut()
-            .find(|c| c.name == name)
-            .context(format!("配置不存在: {}", name))?;
-        config.is_current = true;
-        self.save()?;
-        Ok(())
-    }
-
     /// 设置全局默认配置
     pub fn set_default(&mut self, name: &str) -> Result<()> {
         for config in &mut self.configs {
@@ -114,7 +100,6 @@ impl ConfigStore {
         self.save()?;
 
         Ok(RemoveInfo {
-            was_current: config.is_current,
             was_default: config.is_default,
             path: config.path,
         })
@@ -128,7 +113,6 @@ impl ConfigStore {
 
 /// 删除结果信息
 pub struct RemoveInfo {
-    pub was_current: bool,
     pub was_default: bool,
     pub path: PathBuf,
 }

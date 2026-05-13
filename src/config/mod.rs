@@ -16,9 +16,6 @@ pub struct Config {
     pub path: PathBuf,
     /// 描述
     pub description: Option<String>,
-    /// 是否当前激活
-    #[serde(default)]
-    pub is_current: bool,
     /// 是否全局默认
     #[serde(default)]
     pub is_default: bool,
@@ -31,7 +28,6 @@ impl Config {
             name,
             path,
             description,
-            is_current: false,
             is_default: false,
         }
     }
@@ -68,11 +64,6 @@ pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"{
 }
 "#;
 
-/// Claude Code settings.json 路径
-pub fn settings_path() -> Result<PathBuf> {
-    let home = dirs::home_dir().context("无法获取用户主目录")?;
-    Ok(home.join(".claude").join("settings.json"))
-}
 
 /// 配置管理器
 pub struct ConfigManager {
@@ -119,39 +110,17 @@ impl ConfigManager {
 
         println!("配置列表:");
         for config in configs {
-            let current = if config.is_current { "●" } else { " " };
             let default = if config.is_default { "★" } else { " " };
             let desc = config.description.as_deref().unwrap_or("");
             println!(
-                " {}{} {} → {} {}",
-                current, default,
+                "  {} {} → {} {}",
+                default,
                 config.name,
                 config.path.display(),
                 desc
             );
         }
-        println!("\n  ● 当前激活  ★ 全局默认");
-        Ok(())
-    }
-
-    /// 切换配置
-    pub fn switch(&mut self, name: &str) -> Result<()> {
-        // 获取目标配置
-        let config = self.store.get(name)?;
-
-        // 读取目标配置内容
-        let content = std::fs::read_to_string(&config.path)
-            .context(format!("无法读取配置文件: {}", config.path.display()))?;
-
-        // 写入 settings.json
-        let settings = settings_path()?;
-        std::fs::write(&settings, content)
-            .context(format!("无法写入 settings.json: {}", settings.display()))?;
-
-        // 更新当前配置标记
-        self.store.set_current(name)?;
-
-        println!("✅ 已切换到配置: {}", name);
+        println!("\n  ★ 全局默认");
         Ok(())
     }
 
@@ -171,6 +140,11 @@ impl ConfigManager {
     /// 获取默认配置名称
     pub fn get_default(&self) -> Option<String> {
         self.store.get_default().map(|c| c.name.clone())
+    }
+
+    /// 获取配置
+    pub fn get_config(&self, name: &str) -> Result<&Config> {
+        self.store.get(name)
     }
 
     /// 检查配置是否存在

@@ -77,8 +77,6 @@ pub enum Commands {
     Today,
     /// 本月成本统计
     Month,
-    /// 同步会话日志
-    Sync,
     /// 详细成本报告
     Report {
         /// 输出格式 (table/json)

@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc, NaiveDate};
 use std::path::Path;
 use std::collections::HashMap;
 
-use super::{CostRecord, ModelPricing};
+use super::CostRecord;
 
 /// 会话文件中的单行消息
 #[derive(Debug, serde::Deserialize)]
@@ -33,7 +33,7 @@ struct Usage {
 }
 
 /// 解析会话文件
-pub fn parse_session(path: &Path, _pricing: &ModelPricing) -> Result<Vec<CostRecord>> {
+pub fn parse_session(path: &Path) -> Result<Vec<CostRecord>> {
     let content = std::fs::read_to_string(path)
         .context(format!("无法读取会话文件: {}", path.display()))?;
 

@@ -1,13 +1,12 @@
-//! 成本追踪模块
+//! 成本追踪模块 — 直接从 JSONL 会话日志实时解析
 
-mod db;
 mod pricing;
 mod session;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate};
+use std::collections::HashMap;
 
-pub use db::CostDb;
 pub use pricing::ModelPricing;
 
 /// 成本记录
@@ -31,22 +30,71 @@ pub struct CostRecord {
 
 /// 成本管理器
 pub struct CostManager {
-    db: CostDb,
     pricing: ModelPricing,
 }
 
 impl CostManager {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            db: CostDb::new()?,
             pricing: ModelPricing::load()?,
         })
+    }
+
+    /// 扫描会话日志目录，解析所有 JSONL 文件并按 (日期, 模型) 聚合
+    fn collect_records(&self) -> Result<Vec<CostRecord>> {
+        let home = dirs::home_dir()
+            .ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?;
+        let projects_dir = home.join(".claude").join("projects");
+
+        if !projects_dir.exists() {
+            return Ok(vec![]);
+        }
+
+        let mut aggregated: HashMap<(NaiveDate, String), CostRecord> = HashMap::new();
+
+        for entry in std::fs::read_dir(&projects_dir)? {
+            let project_dir = entry?.path();
+            if !project_dir.is_dir() {
+                continue;
+            }
+            for session_file in std::fs::read_dir(&project_dir)? {
+                let path = session_file?.path();
+                if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
+                    if let Ok(records) = session::parse_session(&path) {
+                        for record in records {
+                            let key = (record.date, record.model.clone());
+                            let entry = aggregated.entry(key).or_insert_with(|| CostRecord {
+                                date: record.date,
+                                model: record.model,
+                                requests: 0,
+                                input_tokens: 0,
+                                output_tokens: 0,
+                                cache_read_tokens: 0,
+                                cache_creation_tokens: 0,
+                            });
+                            entry.requests += record.requests;
+                            entry.input_tokens += record.input_tokens;
+                            entry.output_tokens += record.output_tokens;
+                            entry.cache_read_tokens += record.cache_read_tokens;
+                            entry.cache_creation_tokens += record.cache_creation_tokens;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(aggregated.into_values().collect())
     }
 
     /// 今日统计
     pub fn today(&self) -> Result<()> {
         let today = Local::now().date_naive();
-        self.show_stats(today, today)?;
+        let records = self.collect_records()?;
+        let filtered: Vec<CostRecord> = records
+            .into_iter()
+            .filter(|r| r.date == today)
+            .collect();
+        self.show_stats(&filtered, today, today)?;
         Ok(())
     }
 
@@ -55,65 +103,74 @@ impl CostManager {
         let now = Local::now();
         let start = now.with_day(1).unwrap().date_naive();
         let end = now.date_naive();
-        self.show_stats(start, end)?;
+        let records = self.collect_records()?;
+        let filtered: Vec<CostRecord> = records
+            .into_iter()
+            .filter(|r| r.date >= start && r.date <= end)
+            .collect();
+        self.show_stats(&filtered, start, end)?;
         Ok(())
     }
 
-    /// 显示统计
-    fn show_stats(&self, start: NaiveDate, end: NaiveDate) -> Result<()> {
-        let records = self.db.get_range(start, end)?;
-
+    /// 显示统计（按模型分组）
+    fn show_stats(&self, records: &[CostRecord], start: NaiveDate, end: NaiveDate) -> Result<()> {
         if records.is_empty() {
-            println!("暂无数据，使用 `cc-switcher cost sync` 同步会话日志");
-            return Ok(())
+            println!("暂无数据");
+            return Ok(());
         }
 
-        // 汇总
-        let total_requests = records.iter().map(|r| r.requests).sum::<u64>();
-        let total_input = records.iter().map(|r| r.input_tokens).sum::<u64>();
-        let total_output = records.iter().map(|r| r.output_tokens).sum::<u64>();
-        let total_cache_read = records.iter().map(|r| r.cache_read_tokens).sum::<u64>();
-        let total_cache_write = records.iter().map(|r| r.cache_creation_tokens).sum::<u64>();
+        // 按 model 分组
+        let mut by_model: HashMap<String, Vec<&CostRecord>> = HashMap::new();
+        for r in records {
+            by_model.entry(r.model.clone()).or_default().push(r);
+        }
 
-        // 按模型分组计算成本
-        let mut total_cost = 0.0;
-        for record in &records {
-            total_cost += self.pricing.calculate_cost(
-                &record.model,
-                record.input_tokens,
-                record.output_tokens,
-                record.cache_read_tokens,
-                record.cache_creation_tokens,
+        println!("日期范围: {} ~ {}", start, end);
+
+        // 每个模型的汇总，按名称排序
+        let mut models_sorted: Vec<_> = by_model.keys().collect();
+        models_sorted.sort();
+
+        let mut total_requests = 0u64;
+        let mut total_cost = 0.0f64;
+
+        for model in &models_sorted {
+            let group = &by_model[*model];
+            let reqs = group.iter().map(|r| r.requests).sum::<u64>();
+            let input = group.iter().map(|r| r.input_tokens).sum::<u64>();
+            let output = group.iter().map(|r| r.output_tokens).sum::<u64>();
+            let cache_read = group.iter().map(|r| r.cache_read_tokens).sum::<u64>();
+            let cache_write = group.iter().map(|r| r.cache_creation_tokens).sum::<u64>();
+            let cost = group.iter().map(|r| self.pricing.calculate_cost(
+                &r.model, r.input_tokens, r.output_tokens,
+                r.cache_read_tokens, r.cache_creation_tokens,
+            )).sum::<f64>();
+
+            total_requests += reqs;
+            total_cost += cost;
+
+            println!(
+                "\n  {} — {} 次 | 输入 {:.1}K | 输出 {:.1}K | 缓存读 {:.1}K | 缓存写 {:.1}K | $ {:.2}",
+                model, reqs,
+                input as f64 / 1000.0, output as f64 / 1000.0,
+                cache_read as f64 / 1000.0, cache_write as f64 / 1000.0,
+                cost
             );
         }
 
-        println!(
-            "日期范围: {} ~ {}\n\
-            请求次数: {}\n\
-            输入 tokens: {} ({:.1}K)\n\
-            输出 tokens: {} ({:.1}K)\n\
-            缓存读取: {} ({:.1}K)\n\
-            缓存写入: {} ({:.1}K)\n\
-            估算成本: $ {:.2}",
-            start, end,
-            total_requests,
-            total_input, total_input as f64 / 1000.0,
-            total_output, total_output as f64 / 1000.0,
-            total_cache_read, total_cache_read as f64 / 1000.0,
-            total_cache_write, total_cache_write as f64 / 1000.0,
-            total_cost
-        );
+        println!("\n  合计: {} 次 | $ {:.2}", total_requests, total_cost);
 
         Ok(())
     }
 
     /// 详细报告
     pub fn report(&self, format: &str) -> Result<()> {
-        let records = self.db.get_all()?;
+        let mut records = self.collect_records()?;
+        records.sort_by(|a, b| b.date.cmp(&a.date));
 
         if records.is_empty() {
             println!("暂无数据");
-            return Ok(())
+            return Ok(());
         }
 
         match format {
@@ -128,7 +185,7 @@ impl CostManager {
                 println!(
                     "-----------|----------------|----------|---------|---------|---------|---------|--------"
                 );
-                for r in records {
+                for r in &records {
                     let cost = self.pricing.calculate_cost(
                         &r.model,
                         r.input_tokens,
@@ -154,50 +211,6 @@ impl CostManager {
             }
         }
 
-        Ok(())
-    }
-
-    /// 同步会话日志
-    pub fn sync(&mut self) -> Result<()> {
-        let home = dirs::home_dir()
-            .ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?;
-
-        let projects_dir = home.join(".claude").join("projects");
-
-        if !projects_dir.exists() {
-            println!("Claude Code 会话目录不存在: {}", projects_dir.display());
-            return Ok(())
-        }
-
-        let mut imported = 0;
-        let mut skipped = 0;
-
-        // 遍历所有项目目录
-        for entry in std::fs::read_dir(&projects_dir)? {
-            let project_dir = entry?.path();
-
-            // 遍历所有会话文件
-            for session_file in std::fs::read_dir(&project_dir)? {
-                let path = session_file?.path();
-
-                if path.extension().map(|e| e == "jsonl").unwrap_or(false) {
-                    match session::parse_session(&path, &self.pricing) {
-                        Ok(records) => {
-                            for record in records {
-                                self.db.insert(&record)?;
-                                imported += 1;
-                            }
-                        }
-                        Err(e) => {
-                            println!("跳过文件 {}: {}", path.display(), e);
-                            skipped += 1;
-                        }
-                    }
-                }
-            }
-        }
-
-        println!("同步完成: 导入 {} 条记录，跳过 {} 个文件", imported, skipped);
         Ok(())
     }
 }
