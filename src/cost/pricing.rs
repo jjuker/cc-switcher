@@ -6,6 +6,9 @@ use std::path::PathBuf;
 
 use crate::utils::ensure_data_dir;
 
+/// 编译时嵌入默认定价配置
+const DEFAULT_PRICING: &str = include_str!("../../pricing.default.json");
+
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct PricingInfo {
     pub input_per_million: f64,
@@ -25,22 +28,12 @@ impl ModelPricing {
         Ok(dir.join("pricing.json"))
     }
 
-    fn default_path() -> Result<PathBuf> {
-        let exe = std::env::current_exe().context("无法获取程序路径")?;
-        let exe_dir = exe.parent().context("无法获取程序目录")?;
-        Ok(exe_dir.join("pricing.default.json"))
-    }
-
     pub fn load() -> Result<Self> {
         let path = Self::file_path()?;
 
         if !path.exists() {
-            let default = Self::default_path()?;
-            std::fs::copy(&default, &path)
-                .context(format!(
-                    "默认定价文件不存在: {}\n请将 pricing.default.json 放在程序同目录",
-                    default.display()
-                ))?;
+            std::fs::write(&path, DEFAULT_PRICING)
+                .context(format!("无法初始化定价配置: {}", path.display()))?;
         }
 
         let content = std::fs::read_to_string(&path)
