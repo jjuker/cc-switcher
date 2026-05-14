@@ -217,9 +217,10 @@ fn open_editor(path: &std::path::Path) -> Result<()> {
         .or_else(|_| std::env::var("VISUAL"))
         .unwrap_or_else(|_| "code".to_string());
 
-    // 安全验证：编辑器名称不应包含路径分隔符或特殊字符
-    if editor.contains(['/', '\\', ';', '&', '|', '`', '$', '(', ')']) {
-        println!("⚠️  编辑器名称包含不安全字符，请手动编辑: {}", path.display());
+    // 安全验证：只允许简单的编辑器名称（字母、数字、下划线、连字符、点）
+    // 拒绝路径和任何可能触发 shell 注入的字符
+    if !editor.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+        println!("⚠️  编辑器名称包含非法字符，请手动编辑: {}", path.display());
         println!("   编辑器设置: {}", editor);
         return Ok(());
     }

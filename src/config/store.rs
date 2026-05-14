@@ -77,16 +77,13 @@ impl ConfigStore {
 
     /// 设置全局默认配置
     pub fn set_default(&mut self, name: &str) -> Result<()> {
-        for config in &mut self.configs {
-            config.is_default = false;
+        if !self.configs.iter().any(|c| c.name == name) {
+            return Err(anyhow::anyhow!("配置不存在: {}", name));
         }
-        let config = self.configs
-            .iter_mut()
-            .find(|c| c.name == name)
-            .context(format!("配置不存在: {}", name))?;
-        config.is_default = true;
-        self.save()?;
-        Ok(())
+        for config in &mut self.configs {
+            config.is_default = config.name == name;
+        }
+        self.save()
     }
 
     /// 删除配置

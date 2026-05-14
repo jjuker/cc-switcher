@@ -127,8 +127,7 @@ fn handle_remove(name: &str, delete: bool) -> Result<()> {
     // 输出状态
     if info.was_default {
         println!("⚠️  已删除默认配置 '{}', 请重新设置: ccs default <name>", name);
-    }
-    if !info.was_default {
+    } else {
         println!("✅ 已删除配置: {}", name);
     }
 

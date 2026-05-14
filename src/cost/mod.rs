@@ -140,7 +140,7 @@ impl CostManager {
             let input = group.iter().map(|r| r.input_tokens).sum::<u64>();
             let output = group.iter().map(|r| r.output_tokens).sum::<u64>();
             let cache_read = group.iter().map(|r| r.cache_read_tokens).sum::<u64>();
-            let cache_write = group.iter().map(|r| r.cache_creation_tokens).sum::<u64>();
+            let cache_creation = group.iter().map(|r| r.cache_creation_tokens).sum::<u64>();
             let cost = group.iter().map(|r| self.pricing.calculate_cost(
                 &r.model, r.input_tokens, r.output_tokens,
                 r.cache_read_tokens, r.cache_creation_tokens,
@@ -150,10 +150,10 @@ impl CostManager {
             total_cost += cost;
 
             println!(
-                "\n  {} — {} 次 | 输入 {:.1}K | 输出 {:.1}K | 缓存读 {:.1}K | 缓存写 {:.1}K | $ {:.2}",
+                "\n  {} — {} 次 | 输入 {:.1}K | 输出 {:.1}K | 缓存读 {:.1}K | 缓存建 {:.1}K | $ {:.2}",
                 model, reqs,
                 input as f64 / 1000.0, output as f64 / 1000.0,
-                cache_read as f64 / 1000.0, cache_write as f64 / 1000.0,
+                cache_read as f64 / 1000.0, cache_creation as f64 / 1000.0,
                 cost
             );
         }

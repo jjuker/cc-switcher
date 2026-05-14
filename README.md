@@ -47,12 +47,12 @@ ccs default <name>           # 设置全局默认配置
 ccs pin <name>               # 项目级绑定（写入 .cc-switcher.json）
 ccs unpin                    # 解除项目绑定
 ccs list                     # 列出所有配置
-ccs add <name> <path>        # 添加配置
+ccs new <name>               # 新建配置（自动生成模板并打开编辑器）
+ccs add <name> <path>        # 添加已有配置文件
 ccs remove <name>            # 删除配置
 
 ccs today                    # 今日成本统计
 ccs month                    # 本月成本统计
-ccs sync                     # 同步会话日志
 ccs report                   # 详细成本报告
 ```
 
@@ -72,9 +72,6 @@ cd 进入项目时自动识别，无需手动切换。
 ## 成本追踪
 
 ```bash
-# 同步会话日志
-ccs sync
-
 # 今日统计
 ccs today
 
@@ -100,7 +97,7 @@ ccs report -f json
 ## 存储位置
 
 - 配置索引：`~/.cc-switcher/configs.json`
-- 成本数据：`~/.cc-switcher/costs.db`
+- 成本数据：实时扫描 `~/.claude/projects/` 下 JSONL 会话文件
 - 定价配置：`~/.cc-switcher/pricing.json`
 - 项目绑定：`<project-dir>/.cc-switcher.json`
 
@@ -126,7 +123,6 @@ src/
 │   └── store.rs      # 配置存储（JSON）
 └── cost/
     ├── mod.rs        # 成本管理器
-    ├── session.rs    # 会话日志解析
-    ├── pricing.rs    # 模型定价
-    └── db.rs         # SQLite 存储
+    ├── session.rs    # JSONL 会话日志解析
+    └── pricing.rs    # 模型定价
 ```
