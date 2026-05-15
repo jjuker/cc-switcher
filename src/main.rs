@@ -32,7 +32,11 @@ fn handle_command(cmd: Commands) -> Result<()> {
         Commands::Unpin => handle_unpin()?,
         Commands::List => handle_list()?,
         Commands::New { name, description } => handle_new(name, description)?,
-        Commands::Add { name, path, description } => handle_add(name, path, description)?,
+        Commands::Add {
+            name,
+            path,
+            description,
+        } => handle_add(name, path, description)?,
         Commands::Remove { name, delete } => handle_remove(&name, delete)?,
         Commands::Today => handle_today()?,
         Commands::Month => handle_month()?,
@@ -126,7 +130,10 @@ fn handle_remove(name: &str, delete: bool) -> Result<()> {
 
     // 输出状态
     if info.was_default {
-        println!("⚠️  已删除默认配置 '{}', 请重新设置: ccs default <name>", name);
+        println!(
+            "⚠️  已删除默认配置 '{}', 请重新设置: ccs default <name>",
+            name
+        );
     } else {
         println!("✅ 已删除配置: {}", name);
     }

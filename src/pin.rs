@@ -52,7 +52,10 @@ pub fn pin_current_dir(config_name: &str, description: Option<String>) -> Result
 
         // 尝试解析为 PinConfig
         if serde_json::from_str::<PinConfig>(&content).is_err() {
-            println!("⚠️  文件 {} 不是有效的绑定配置，将被覆盖", pin_file.display());
+            println!(
+                "⚠️  文件 {} 不是有效的绑定配置，将被覆盖",
+                pin_file.display()
+            );
         }
     }
 
@@ -61,11 +64,9 @@ pub fn pin_current_dir(config_name: &str, description: Option<String>) -> Result
         description,
     };
 
-    let content = serde_json::to_string_pretty(&config)
-        .context("无法序列化绑定配置")?;
+    let content = serde_json::to_string_pretty(&config).context("无法序列化绑定配置")?;
 
-    std::fs::write(&pin_file, content)
-        .context(format!("无法写入: {}", pin_file.display()))?;
+    std::fs::write(&pin_file, content).context(format!("无法写入: {}", pin_file.display()))?;
 
     Ok(pin_file)
 }
@@ -76,8 +77,7 @@ pub fn unpin_current_dir() -> Result<bool> {
     let pin_file = cwd.join(PIN_FILE);
 
     if pin_file.exists() {
-        std::fs::remove_file(&pin_file)
-            .context(format!("无法删除: {}", pin_file.display()))?;
+        std::fs::remove_file(&pin_file).context(format!("无法删除: {}", pin_file.display()))?;
         Ok(true)
     } else {
         Ok(false)

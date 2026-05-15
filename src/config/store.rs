@@ -3,8 +3,8 @@
 use anyhow::{Context, Result};
 use std::path::PathBuf;
 
-use crate::utils::ensure_data_dir;
 use super::Config;
+use crate::utils::ensure_data_dir;
 
 /// 配置存储
 pub struct ConfigStore {
@@ -30,19 +30,14 @@ impl ConfigStore {
         let content = std::fs::read_to_string(&path)
             .context(format!("无法读取配置文件: {}", path.display()))?;
 
-        let configs: Vec<Config> = serde_json::from_str(&content)
-            .context("无法解析配置文件")?;
+        let configs: Vec<Config> = serde_json::from_str(&content).context("无法解析配置文件")?;
 
-        Ok(Self {
-            configs,
-            path,
-        })
+        Ok(Self { configs, path })
     }
 
     /// 保存配置
     fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(&self.configs)
-            .context("无法序列化配置")?;
+        let content = serde_json::to_string_pretty(&self.configs).context("无法序列化配置")?;
 
         std::fs::write(&self.path, content)
             .context(format!("无法写入配置文件: {}", self.path.display()))?;
@@ -88,7 +83,8 @@ impl ConfigStore {
 
     /// 删除配置
     pub fn remove(&mut self, name: &str) -> Result<RemoveInfo> {
-        let index = self.configs
+        let index = self
+            .configs
             .iter()
             .position(|c| c.name == name)
             .context(format!("配置不存在: {}", name))?;

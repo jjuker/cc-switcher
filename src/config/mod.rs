@@ -37,8 +37,7 @@ impl Config {
 pub fn configs_dir() -> Result<PathBuf> {
     let dir = crate::utils::ensure_data_dir()?.join("configs");
     if !dir.exists() {
-        std::fs::create_dir_all(&dir)
-            .context(format!("无法创建配置目录: {}", dir.display()))?;
+        std::fs::create_dir_all(&dir).context(format!("无法创建配置目录: {}", dir.display()))?;
     }
     Ok(dir)
 }
@@ -63,7 +62,6 @@ pub const DEFAULT_CONFIG_TEMPLATE: &str = r#"{
   "verbose": true
 }
 "#;
-
 
 /// 配置管理器
 pub struct ConfigManager {
@@ -219,7 +217,10 @@ fn open_editor(path: &std::path::Path) -> Result<()> {
 
     // 安全验证：只允许简单的编辑器名称（字母、数字、下划线、连字符、点）
     // 拒绝路径和任何可能触发 shell 注入的字符
-    if !editor.chars().all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.') {
+    if !editor
+        .chars()
+        .all(|c| c.is_alphanumeric() || c == '_' || c == '-' || c == '.')
+    {
         println!("⚠️  编辑器名称包含非法字符，请手动编辑: {}", path.display());
         println!("   编辑器设置: {}", editor);
         return Ok(());
@@ -230,7 +231,11 @@ fn open_editor(path: &std::path::Path) -> Result<()> {
     match result {
         Ok(status) if status.success() => {}
         Ok(_) => println!("⚠️  编辑器启动失败，请手动编辑: {}", path.display()),
-        Err(_) => println!("⚠️  未找到编辑器 '{}', 请手动编辑: {}", editor, path.display()),
+        Err(_) => println!(
+            "⚠️  未找到编辑器 '{}', 请手动编辑: {}",
+            editor,
+            path.display()
+        ),
     }
 
     Ok(())

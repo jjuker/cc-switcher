@@ -13,8 +13,7 @@ pub fn data_dir() -> Result<PathBuf> {
 pub fn ensure_data_dir() -> Result<PathBuf> {
     let dir = data_dir()?;
     if !dir.exists() {
-        std::fs::create_dir_all(&dir)
-            .context(format!("无法创建目录: {}", dir.display()))?;
+        std::fs::create_dir_all(&dir).context(format!("无法创建目录: {}", dir.display()))?;
     }
     Ok(dir)
 }

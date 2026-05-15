@@ -1,9 +1,9 @@
 //! 会话日志解析
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Utc, NaiveDate};
-use std::path::Path;
+use chrono::{DateTime, NaiveDate, Utc};
 use std::collections::HashMap;
+use std::path::Path;
 
 use super::CostRecord;
 
@@ -34,8 +34,8 @@ struct Usage {
 
 /// 解析会话文件
 pub fn parse_session(path: &Path) -> Result<Vec<CostRecord>> {
-    let content = std::fs::read_to_string(path)
-        .context(format!("无法读取会话文件: {}", path.display()))?;
+    let content =
+        std::fs::read_to_string(path).context(format!("无法读取会话文件: {}", path.display()))?;
 
     let mut records: HashMap<(NaiveDate, String), CostRecord> = HashMap::new();
 

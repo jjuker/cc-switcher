@@ -38,8 +38,8 @@ impl ModelPricing {
 
         let content = std::fs::read_to_string(&path)
             .context(format!("无法读取定价文件: {}", path.display()))?;
-        let pricing: HashMap<String, PricingInfo> = serde_json::from_str(&content)
-            .context("无法解析定价文件")?;
+        let pricing: HashMap<String, PricingInfo> =
+            serde_json::from_str(&content).context("无法解析定价文件")?;
         Ok(Self { pricing })
     }
 
