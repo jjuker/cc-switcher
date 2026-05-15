@@ -141,10 +141,9 @@ impl CostManager {
             let output = group.iter().map(|r| r.output_tokens).sum::<u64>();
             let cache_read = group.iter().map(|r| r.cache_read_tokens).sum::<u64>();
             let cache_creation = group.iter().map(|r| r.cache_creation_tokens).sum::<u64>();
-            let cost = group.iter().map(|r| self.pricing.calculate_cost(
-                &r.model, r.input_tokens, r.output_tokens,
-                r.cache_read_tokens, r.cache_creation_tokens,
-            )).sum::<f64>();
+            let cost = self.pricing.calculate_cost(
+                model, input, output, cache_read, cache_creation,
+            );
 
             total_requests += reqs;
             total_cost += cost;
