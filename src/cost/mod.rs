@@ -7,7 +7,6 @@ mod session;
 
 use anyhow::Result;
 use chrono::{Datelike, Local, NaiveDate};
-use std::collections::HashSet;
 
 pub use pricing::ModelPricing;
 
@@ -58,25 +57,14 @@ impl CostManager {
         let result = self.collect()?;
         let stats: Vec<_> = result
             .stats
-            .into_iter()
+            .iter()
             .filter(|s| s.date == today)
+            .cloned()
             .collect();
 
-        // 仅显示今日数据中出现的未知模型
-        let models_today: HashSet<&str> =
-            stats.iter().map(|s| s.model.as_str()).collect();
-        let unknown: Vec<&str> = result
-            .unknown_models
-            .iter()
-            .filter(|m| models_today.contains(m.as_str()))
-            .map(|s| s.as_str())
-            .collect();
-        if !unknown.is_empty() {
-            eprintln!(
-                "⚠️  以下模型未在定价表中找到，费用按 $0.00 计算: {}",
-                unknown.join(", ")
-            );
-        }
+        result.warn_unknown_models(
+            &stats.iter().map(|s| s.model.as_str()).collect(),
+        );
 
         display::show_stats(&stats, today, today)?;
         Ok(())
@@ -84,30 +72,22 @@ impl CostManager {
 
     pub fn month(&self) -> Result<()> {
         let now = Local::now();
-        let start = now.with_day(1).unwrap().date_naive();
+        let start = now
+            .with_day(1)
+            .expect("当前日期应始终支持将日设为 1")
+            .date_naive();
         let end = now.date_naive();
         let result = self.collect()?;
         let stats: Vec<_> = result
             .stats
-            .into_iter()
+            .iter()
             .filter(|s| s.date >= start && s.date <= end)
+            .cloned()
             .collect();
 
-        // 仅显示本月数据中出现的未知模型
-        let models_this_month: HashSet<&str> =
-            stats.iter().map(|s| s.model.as_str()).collect();
-        let unknown: Vec<&str> = result
-            .unknown_models
-            .iter()
-            .filter(|m| models_this_month.contains(m.as_str()))
-            .map(|s| s.as_str())
-            .collect();
-        if !unknown.is_empty() {
-            eprintln!(
-                "⚠️  以下模型未在定价表中找到，费用按 $0.00 计算: {}",
-                unknown.join(", ")
-            );
-        }
+        result.warn_unknown_models(
+            &stats.iter().map(|s| s.model.as_str()).collect(),
+        );
 
         display::show_stats(&stats, start, end)?;
         Ok(())

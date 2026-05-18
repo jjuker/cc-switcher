@@ -46,7 +46,7 @@ impl CollectResult {
     pub fn print_warnings(&self) {
         if self.skipped_lines > 0 {
             eprintln!(
-                "⚠️  解析了 {} 行，其中 {} 行跳过（格式不匹配）",
+                "⚠️  解析了 {} 行，其中 {} 行格式不匹配",
                 self.total_lines, self.skipped_lines
             );
         }
@@ -57,6 +57,22 @@ impl CollectResult {
             eprintln!(
                 "⚠️  以下模型未在定价表中找到，费用按 $0.00 计算: {}",
                 self.unknown_models.join(", ")
+            );
+        }
+    }
+
+    /// 警告当前统计范围内出现的未知模型
+    pub fn warn_unknown_models(&self, active_models: &HashSet<&str>) {
+        let unknown: Vec<&str> = self
+            .unknown_models
+            .iter()
+            .filter(|m| active_models.contains(m.as_str()))
+            .map(|s| s.as_str())
+            .collect();
+        if !unknown.is_empty() {
+            eprintln!(
+                "⚠️  以下模型未在定价表中找到，费用按 $0.00 计算: {}",
+                unknown.join(", ")
             );
         }
     }

@@ -85,10 +85,8 @@ impl ModelPricing {
 
         // 3. 启发式：去掉日期后缀（如 "-20250514"）
         if let Some(normalized) = normalize_model_name(model) {
-            if normalized != model {
-                if let Some(info) = self.pricing.get(&normalized) {
-                    return Some(info);
-                }
+            if let Some(info) = self.pricing.get(&normalized) {
+                return Some(info);
             }
         }
 
@@ -101,7 +99,7 @@ fn is_date_segment(s: &str) -> bool {
     if s.len() != 8 || !s.chars().all(|c| c.is_ascii_digit()) {
         return false;
     }
-    // 年份千年位：2000-2999 范围内
+    // 年份千年位：1000-2999 范围内（YYYYMMDD 格式下首字必为 1 或 2）
     let first = s.as_bytes()[0];
     first == b'1' || first == b'2'
 }

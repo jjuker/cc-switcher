@@ -77,10 +77,7 @@ pub fn parse_session(path: &Path) -> Result<ParseResult> {
             None => continue,
         };
 
-        let model = match message.model {
-            Some(m) => m,
-            None => continue,
-        };
+        let model = message.model.unwrap_or_else(|| "unknown".into());
 
         let date = msg
             .timestamp
