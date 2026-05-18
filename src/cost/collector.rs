@@ -1,37 +1,103 @@
 use anyhow::Result;
 use chrono::NaiveDate;
-use std::collections::HashMap;
-use std::path::Path;
-use std::sync::Once;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
 use super::{AggregatedStats, CostRecord};
 use crate::cost::pricing::ModelPricing;
 use crate::cost::session;
 
-static PARSE_WARNING: Once = Once::new();
+/// Claude Code 会话日志目录
+fn claude_projects_dir() -> Result<PathBuf> {
+    let dir = dirs::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?
+        .join(".claude")
+        .join("projects");
+    Ok(dir)
+}
 
-/// 扫描会话目录，解析失败时警告（仅首次）
-pub fn scan_session_files(dir: &Path) -> impl Iterator<Item = CostRecord> + '_ {
-    WalkDir::new(dir)
-        .into_iter()
-        .filter_map(|e| e.ok())
-        .filter(|e| e.path().extension().map(|x| x == "jsonl").unwrap_or(false))
-        .flat_map(|e| {
-            session::parse_session(e.path()).unwrap_or_else(|_| {
-                PARSE_WARNING.call_once(|| {
-                    eprintln!("⚠️  部分会话日志解析失败，成本统计可能不完整");
-                });
-                vec![]
-            })
-        })
+/// 目录扫描结果
+struct ScanResult {
+    records: Vec<CostRecord>,
+    total_lines: usize,
+    skipped_lines: usize,
+    failed_files: usize,
+}
+
+/// 聚合结果（含未知模型列表）
+struct AggregateResult {
+    stats: Vec<AggregatedStats>,
+    unknown_models: Vec<String>,
+}
+
+/// 聚合结果（含诊断信息，供调用方决定如何处理）
+#[derive(Default)]
+pub struct CollectResult {
+    pub stats: Vec<AggregatedStats>,
+    pub unknown_models: Vec<String>,
+    pub total_lines: usize,
+    pub skipped_lines: usize,
+    pub failed_files: usize,
+}
+
+impl CollectResult {
+    /// 打印采集过程中的警告信息
+    pub fn print_warnings(&self) {
+        if self.skipped_lines > 0 {
+            eprintln!(
+                "⚠️  解析了 {} 行，其中 {} 行跳过（格式不匹配）",
+                self.total_lines, self.skipped_lines
+            );
+        }
+        if self.failed_files > 0 {
+            eprintln!("⚠️  {} 个会话文件解析失败", self.failed_files);
+        }
+        if !self.unknown_models.is_empty() {
+            eprintln!(
+                "⚠️  以下模型未在定价表中找到，费用按 $0.00 计算: {}",
+                self.unknown_models.join(", ")
+            );
+        }
+    }
+}
+
+/// 扫描会话目录，返回原始记录和解析统计
+fn scan_session_files(dir: &Path) -> ScanResult {
+    let mut all_records = Vec::new();
+    let mut total_lines = 0;
+    let mut skipped_lines = 0;
+    let mut failed_files = 0;
+
+    for entry in WalkDir::new(dir).into_iter().filter_map(|e| e.ok()) {
+        if !matches!(entry.path().extension(), Some(ext) if ext == "jsonl") {
+            continue;
+        }
+        match session::parse_session(entry.path()) {
+            Ok(result) => {
+                total_lines += result.total_lines;
+                skipped_lines += result.skipped_lines;
+                all_records.extend(result.records);
+            }
+            Err(_) => {
+                failed_files += 1;
+            }
+        }
+    }
+
+    ScanResult {
+        records: all_records,
+        total_lines,
+        skipped_lines,
+        failed_files,
+    }
 }
 
 /// 聚合原始记录并计算成本
-pub fn aggregate_with_cost(
-    records: Vec<CostRecord>,
+fn aggregate_with_cost(
+    records: &[CostRecord],
     pricing: &ModelPricing,
-) -> Vec<AggregatedStats> {
+) -> AggregateResult {
     let mut grouped: HashMap<(NaiveDate, String), CostRecord> = HashMap::new();
 
     for r in records {
@@ -45,19 +111,23 @@ pub fn aggregate_with_cost(
                 e.cache_read_tokens += r.cache_read_tokens;
                 e.cache_creation_tokens += r.cache_creation_tokens;
             })
-            .or_insert(r);
+            .or_insert_with(|| r.clone());
     }
 
-    grouped
+    let mut unknown_models = HashSet::new();
+
+    let stats = grouped
         .into_values()
         .map(|r| {
-            let cost = pricing.calculate_cost(
-                &r.model,
-                r.input_tokens,
-                r.output_tokens,
-                r.cache_read_tokens,
-                r.cache_creation_tokens,
-            );
+            let (cost, found) = match pricing.get(&r.model) {
+                Some(info) => (info.calculate_cost(&r), true),
+                None => (0.0, false),
+            };
+
+            if !found {
+                unknown_models.insert(r.model.clone());
+            }
+
             AggregatedStats {
                 date: r.date,
                 model: r.model,
@@ -69,20 +139,33 @@ pub fn aggregate_with_cost(
                 cost,
             }
         })
-        .collect()
+        .collect();
+
+    let mut unknown_list: Vec<String> = unknown_models.into_iter().collect();
+    unknown_list.sort();
+
+    AggregateResult {
+        stats,
+        unknown_models: unknown_list,
+    }
 }
 
 /// 扫描并聚合所有统计数据
-pub fn collect_stats(pricing: &ModelPricing) -> Result<Vec<AggregatedStats>> {
-    let dir = dirs::home_dir()
-        .ok_or_else(|| anyhow::anyhow!("无法获取用户主目录"))?
-        .join(".claude")
-        .join("projects");
+pub fn collect_stats(pricing: &ModelPricing) -> Result<CollectResult> {
+    let dir = claude_projects_dir()?;
 
     if !dir.exists() {
-        return Ok(vec![]);
+        return Ok(CollectResult::default());
     }
 
-    let records: Vec<CostRecord> = scan_session_files(&dir).collect();
-    Ok(aggregate_with_cost(records, pricing))
+    let scan = scan_session_files(&dir);
+    let agg = aggregate_with_cost(&scan.records, pricing);
+
+    Ok(CollectResult {
+        stats: agg.stats,
+        unknown_models: agg.unknown_models,
+        total_lines: scan.total_lines,
+        skipped_lines: scan.skipped_lines,
+        failed_files: scan.failed_files,
+    })
 }

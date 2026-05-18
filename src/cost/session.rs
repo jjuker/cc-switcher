@@ -32,21 +32,35 @@ struct Usage {
     cache_creation_input_tokens: u64,
 }
 
+/// 解析结果（含统计信息）
+pub struct ParseResult {
+    pub records: Vec<CostRecord>,
+    pub total_lines: usize,
+    pub skipped_lines: usize,
+}
+
 /// 解析会话文件
-pub fn parse_session(path: &Path) -> Result<Vec<CostRecord>> {
+pub fn parse_session(path: &Path) -> Result<ParseResult> {
     let content =
         std::fs::read_to_string(path).context(format!("无法读取会话文件: {}", path.display()))?;
 
     let mut records: HashMap<(NaiveDate, String), CostRecord> = HashMap::new();
+    let mut total_lines = 0usize;
+    let mut skipped_lines = 0usize;
 
     for line in content.lines() {
+        total_lines += 1;
+
         if line.trim().is_empty() {
             continue;
         }
 
         let msg: SessionMessage = match serde_json::from_str(line) {
             Ok(m) => m,
-            Err(_) => continue,
+            Err(_) => {
+                skipped_lines += 1;
+                continue;
+            }
         };
 
         if msg.msg_type != "assistant" {
@@ -63,7 +77,10 @@ pub fn parse_session(path: &Path) -> Result<Vec<CostRecord>> {
             None => continue,
         };
 
-        let model = message.model.unwrap_or_else(|| "unknown".into());
+        let model = match message.model {
+            Some(m) => m,
+            None => continue,
+        };
 
         let date = msg
             .timestamp
@@ -90,7 +107,11 @@ pub fn parse_session(path: &Path) -> Result<Vec<CostRecord>> {
         entry.cache_creation_tokens += usage.cache_creation_input_tokens;
     }
 
-    Ok(records.into_values().collect())
+    Ok(ParseResult {
+        records: records.into_values().collect(),
+        total_lines,
+        skipped_lines,
+    })
 }
 
 /// 获取文件修改日期（fallback）

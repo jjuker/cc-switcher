@@ -135,19 +135,14 @@ impl ConfigManager {
         Ok(())
     }
 
-    /// 获取默认配置名称
-    pub fn get_default(&self) -> Option<String> {
-        self.store.get_default().map(|c| c.name.clone())
-    }
-
     /// 获取配置
     pub fn get_config(&self, name: &str) -> Result<&Config> {
         self.store.get(name)
     }
 
-    /// 检查配置是否存在
-    pub fn exists(&self, name: &str) -> bool {
-        self.store.get(name).is_ok()
+    /// 获取默认配置（完整引用）
+    pub fn get_default_config(&self) -> Option<&Config> {
+        self.store.get_default()
     }
 
     /// 新建配置（自动创建文件，打开编辑器）

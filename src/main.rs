@@ -72,8 +72,8 @@ fn parse_external_args(args: &[String]) -> (String, Vec<String>) {
 
 fn handle_run(name: Option<String>, args: Vec<String>) -> Result<()> {
     let manager = config::ConfigManager::new()?;
-    let config_name = run::resolve_config_name(name, &manager)?;
-    run::run_with_config(&config_name, &args, &manager)?;
+    let config = run::resolve_config(name, &manager)?;
+    run::run_with_config(config, &args)?;
     Ok(())
 }
 
@@ -84,11 +84,9 @@ fn handle_default(name: &str) -> Result<()> {
 }
 
 fn handle_pin(name: &str) -> Result<()> {
-    // 验证配置存在
+    // 验证配置存在（get_config 失败自带 "配置不存在" 错误）
     let manager = config::ConfigManager::new()?;
-    if !manager.exists(name) {
-        return Err(anyhow::anyhow!("配置不存在: {}", name));
-    }
+    manager.get_config(name)?;
 
     let pin_file = pin::pin_current_dir(name, None)?;
     println!("✅ 已绑定配置: {} → {}", pin_file.display(), name);
